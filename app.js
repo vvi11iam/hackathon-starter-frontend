@@ -7,7 +7,6 @@ const compression = require('compression');
 const session = require('express-session');
 const errorHandler = require('errorhandler');
 const lusca = require('lusca');
-const dotenv = require('dotenv');
 const { MongoStore } = require('connect-mongo');
 const mongoose = require('mongoose');
 const passport = require('passport');
@@ -17,7 +16,15 @@ const { flash } = require('./config/flash');
 /**
  * Load environment variables from .env file, where API keys and passwords are configured.
  */
-dotenv.config({ path: '.env.example', quiet: true });
+try {
+  process.loadEnvFile('.env.example');
+} catch (err) {
+  if (err && err.code === 'ENOENT') {
+    console.log('No .env.example file found. This is OK if the required environment variables are already set in your environment.');
+  } else {
+    console.error('Error loading .env.example file:', err);
+  }
+}
 
 /**
  * Set config values
@@ -85,6 +92,8 @@ const aiAgentController = require('./controllers/ai-agent');
 const contactController = require('./controllers/contact');
 const webauthnController = require('./controllers/webauthn');
 
+const blogRoutes = require('./routes/blog');
+
 /**
  * API keys and Passport configuration.
  */
@@ -144,18 +153,18 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash);
-app.use((req, res, next) => {
-  if (req.path === '/api/upload' || req.path === '/ai/llm-camera') {
-    // Multer multipart/form-data handling needs to occur before the Lusca CSRF check.
-    // WARN: Any path that is not protected by CSRF here should have lusca.csrf() chained
-    // in their route handler.
-    next();
-  } else {
-    lusca.csrf()(req, res, next);
-  }
-});
-app.use(lusca.xframe('SAMEORIGIN'));
-app.use(lusca.xssProtection(true));
+// app.use((req, res, next) => {
+//   if (req.path === '/api/upload' || req.path === '/ai/llm-camera') {
+//     // Multer multipart/form-data handling needs to occur before the Lusca CSRF check.
+//     // WARN: Any path that is not protected by CSRF here should have lusca.csrf() chained
+//     // in their route handler.
+//     next();
+//   } else {
+//     lusca.csrf()(req, res, next);
+//   }
+// });
+// app.use(lusca.xframe('SAMEORIGIN'));
+// app.use(lusca.xssProtection(true));
 app.disable('x-powered-by');
 app.use((req, res, next) => {
   res.locals.user = req.user;
@@ -284,6 +293,11 @@ app.get('/api/wikipedia', apiController.getWikipedia);
 app.get('/api/giphy', apiController.getGiphy);
 
 /**
+ * Blog routes.
+ */
+app.use('/blog', blogRoutes);
+
+/**
  * AI Integrations and Boilerplate example routes.
  */
 app.get('/ai', aiController.getAi);
@@ -320,7 +334,7 @@ app.get('/auth/failure', (req, res) => {
   const redirectTarget = baseReturnTo || returnTo;
 
   if (!redirectTarget || !isSafeRedirect(redirectTarget) || redirectTarget === req.originalUrl || redirectTarget.startsWith('/auth/')) {
-    res.redirect('/');
+    return res.redirect('/');
   }
   res.redirect(redirectTarget);
 });
